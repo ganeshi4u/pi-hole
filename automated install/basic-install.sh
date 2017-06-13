@@ -195,7 +195,7 @@ if is_command apt-get ; then
     # on Ubuntu 18.04.1 LTS we need to add the universe repository to gain access to dialog and dhcpcd5
     APT_SOURCES="/etc/apt/sources.list"
     if awk 'BEGIN{a=1;b=0}/bionic main/{a=0}/bionic.*universe/{b=1}END{exit a + b}' ${APT_SOURCES}; then
-        if ! whiptail --defaultno --title "Dependencies Require Update to Allowed Repositories" --yesno "Would you like to enable 'universe' repository?\\n\\nThis repository is required by the following packages:\\n\\n- dhcpcd5\\n- dialog" ${r} ${c}; then
+        if ! python -m whiptail --defaultno --title "Dependencies Require Update to Allowed Repositories" --yesno "Would you like to enable 'universe' repository?\\n\\nThis repository is required by the following packages:\\n\\n- dhcpcd5\\n- dialog" ${r} ${c}; then
             printf "  %b Aborting installation: dependencies could not be installed.\\n" "${CROSS}"
             exit # exit the installer
         else
@@ -246,7 +246,7 @@ if is_command apt-get ; then
     fi
     # Since our install script is so large, we need several other programs to successfully get a machine provisioned
     # These programs are stored in an array so they can be looped through later
-    INSTALLER_DEPS=(apt-utils dialog debconf dhcpcd5 git ${iproute_pkg} whiptail)
+    INSTALLER_DEPS=(apt-utils dialog debconf dhcpcd5 git ${iproute_pkg} python -m whiptail)
     # Pi-hole itself has several dependencies that also need to be installed
     PIHOLE_DEPS=(cron curl dnsutils iputils-ping lsof netcat psmisc sudo unzip wget idn2 sqlite3 libcap2-bin dns-root-data resolvconf libcap2)
     # The Web dashboard has some that also need to be installed
@@ -335,7 +335,7 @@ elif is_command rpm ; then
             rpm -q ${REMI_PKG} &> /dev/null || rc=$?
         if [[ $rc -ne 0 ]]; then
             # The PHP version available via default repositories is older than version 7
-            if ! whiptail --defaultno --title "PHP 7 Update (recommended)" --yesno "PHP 7.x is recommended for both security and language features.\\nWould you like to install PHP7 via Remi's RPM repository?\\n\\nSee: https://rpms.remirepo.net for more information" ${r} ${c}; then
+            if ! python -m whiptail --defaultno --title "PHP 7 Update (recommended)" --yesno "PHP 7.x is recommended for both security and language features.\\nWould you like to install PHP7 via Remi's RPM repository?\\n\\nSee: https://rpms.remirepo.net for more information" ${r} ${c}; then
                 # User decided to NOT update PHP from REMI, attempt to install the default available PHP version
                 printf "  %b User opt-out of PHP 7 upgrade on CentOS. Deprecated PHP may be in use.\\n" "${INFO}"
                 : # continue with unsupported php version
@@ -358,13 +358,43 @@ elif is_command rpm ; then
     fi
     else
         # Warn user of unsupported version of Fedora or CentOS
-        if ! whiptail --defaultno --title "Unsupported RPM based distribution" --yesno "Would you like to continue installation on an unsupported RPM based distribution?\\n\\nPlease ensure the following packages have been installed manually:\\n\\n- lighttpd\\n- lighttpd-fastcgi\\n- PHP version 7+" ${r} ${c}; then
+        if ! python -m whiptail --defaultno --title "Unsupported RPM based distribution" --yesno "Would you like to continue installation on an unsupported RPM based distribution?\\n\\nPlease ensure the following packages have been installed manually:\\n\\n- lighttpd\\n- lighttpd-fastcgi\\n- PHP version 7+" ${r} ${c}; then
             printf "  %b Aborting installation due to unsupported RPM based distribution\\n" "${CROSS}"
             exit # exit the installer
         else
             printf "  %b Continuing installation with unsupported RPM based distribution\\n" "${INFO}"
         fi
     fi
+
+elif command -v opkg &> /dev/null; then
+    # OpenWRT family
+
+    runUnattended=true
+    PKG_MANAGER="opkg"
+    UPDATE_PKG_CACHE="test_opkg_lock; ${PKG_MANAGER} update"
+    PKG_INSTALL=(${PKG_MANAGER} install)
+    # updating pre-installed packages should be avoided on OpenWRT
+    PKG_COUNT="echo 0"
+
+    # #########################################
+    INSTALLER_DEPS=(git ip-full shadow-useradd)
+    PIHOLE_DEPS=(bc curl sudo unzip lsof netcat bind-dig)
+    PIHOLE_WEB_DEPS=(lighttpd php7 php7-cgi)
+    LIGHTTPD_USER="http"
+    LIGHTTPD_GROUP="www-data"
+    LIGHTTPD_CFG="lighttpd.conf"
+    DNSMASQ_USER="dnsmasq"
+
+    test_opkg_lock() {
+    i=0
+    while [ -e /usr/lib/opkg/lock ]; do
+        sleep 0.5
+        ((i=i+1))
+    done
+    # Always return success, since we only return if there is no
+    # lock (anymore)
+    return 0
+    }
 
 # If neither apt-get or yum/dnf package managers were found
 else
@@ -543,13 +573,13 @@ get_available_interfaces() {
 # A function for displaying the dialogs the user sees when first running the installer
 welcomeDialogs() {
     # Display the welcome dialog using an appropriately sized window via the calculation conducted earlier in the script
-    whiptail --msgbox --backtitle "Welcome" --title "Pi-hole automated installer" "\\n\\nThis installer will transform your device into a network-wide ad blocker!" ${r} ${c}
+    python -m whiptail --msgbox --backtitle "Welcome" --title "Pi-hole automated installer" "\\n\\nThis installer will transform your device into a network-wide ad blocker!" ${r} ${c}
 
     # Request that users donate if they enjoy the software since we all work on it in our free time
-    whiptail --msgbox --backtitle "Plea" --title "Free and open source" "\\n\\nThe Pi-hole is free, but powered by your donations:  http://pi-hole.net/donate" ${r} ${c}
+    python -m whiptail --msgbox --backtitle "Plea" --title "Free and open source" "\\n\\nThe Pi-hole is free, but powered by your donations:  http://pi-hole.net/donate" ${r} ${c}
 
     # Explain the need for a static address
-    whiptail --msgbox --backtitle "Initiating network interface" --title "Static IP Needed" "\\n\\nThe Pi-hole is a SERVER so it needs a STATIC IP ADDRESS to function properly.
+    python -m whiptail --msgbox --backtitle "Initiating network interface" --title "Static IP Needed" "\\n\\nThe Pi-hole is a SERVER so it needs a STATIC IP ADDRESS to function properly.
 
 In the next section, you can choose to use your current network settings (DHCP) or to manually edit them." ${r} ${c}
 }
@@ -603,13 +633,13 @@ verifyFreeDiskSpace() {
 
 # A function that let's the user pick an interface to use with Pi-hole
 chooseInterface() {
-    # Turn the available interfaces into an array so it can be used with a whiptail dialog
+    # Turn the available interfaces into an array so it can be used with a python -m whiptail dialog
     local interfacesArray=()
     # Number of available interfaces
     local interfaceCount
-    # Whiptail variable storage
+    # python -m whiptail variable storage
     local chooseInterfaceCmd
-    # Temporary Whiptail options storage
+    # Temporary python -m whiptail options storage
     local chooseInterfaceOptions
     # Loop sentinel variable
     local firstLoop=1
@@ -637,8 +667,8 @@ chooseInterface() {
             interfacesArray+=("${line}" "available" "${mode}")
         # Feed the available interfaces into this while loop
         done <<< "${availableInterfaces}"
-        # The whiptail command that will be run, stored in a variable
-        chooseInterfaceCmd=(whiptail --separate-output --radiolist "Choose An Interface (press space to select)" ${r} ${c} ${interfaceCount})
+        # The python -m whiptail command that will be run, stored in a variable
+        chooseInterfaceCmd=(python -m whiptail --separate-output --radiolist "Choose An Interface (press space to select)" ${r} ${c} ${interfaceCount})
         # Now run the command using the interfaces saved into the array
         chooseInterfaceOptions=$("${chooseInterfaceCmd[@]}" "${interfacesArray[@]}" 2>&1 >/dev/tty) || \
         # If the user chooses Cancel, exit
@@ -719,7 +749,7 @@ useIPv6dialog() {
     # If the IPV6_ADDRESS contains a value
     if [[ ! -z "${IPV6_ADDRESS}" ]]; then
         # Display that IPv6 is supported and will be used
-        whiptail --msgbox --backtitle "IPv6..." --title "IPv6 Supported" "$IPV6_ADDRESS will be used to block ads." ${r} ${c}
+        python -m whiptail --msgbox --backtitle "IPv6..." --title "IPv6 Supported" "$IPV6_ADDRESS will be used to block ads." ${r} ${c}
     fi
 }
 
@@ -729,7 +759,7 @@ use4andor6() {
     local useIPv4
     local useIPv6
     # Let use select IPv4 and/or IPv6 via a checklist
-    cmd=(whiptail --separate-output --checklist "Select Protocols (press space to select)" ${r} ${c} 2)
+    cmd=(python -m whiptail --separate-output --checklist "Select Protocols (press space to select)" ${r} ${c} 2)
     # In an array, show the options available:
     # IPv4 (on by default)
     options=(IPv4 "Block ads over IPv4" on
@@ -776,11 +806,11 @@ getStaticIPv4Settings() {
     local ipSettingsCorrect
     # Ask if the user wants to use DHCP settings as their static IP
     # This is useful for users that are using DHCP reservations; then we can just use the information gathered via our functions
-    if whiptail --backtitle "Calibrating network interface" --title "Static IP Address" --yesno "Do you want to use your current network settings as a static address?
+    if python -m whiptail --backtitle "Calibrating network interface" --title "Static IP Address" --yesno "Do you want to use your current network settings as a static address?
           IP address:    ${IPV4_ADDRESS}
           Gateway:       ${IPv4gw}" ${r} ${c}; then
         # If they choose yes, let the user know that the IP address will not be available via DHCP and may cause a conflict.
-        whiptail --msgbox --backtitle "IP information" --title "FYI: IP Conflict" "It is possible your router could still try to assign this IP to a device, which would cause a conflict.  But in most cases the router is smart enough to not do that.
+        python -m whiptail --msgbox --backtitle "IP information" --title "FYI: IP Conflict" "It is possible your router could still try to assign this IP to a device, which would cause a conflict.  But in most cases the router is smart enough to not do that.
 If you are worried, either manually set the address, or modify the DHCP reservation pool so it does not include the IP you want.
 It is also possible to use a DHCP reservation, but if you are going to do that, you might as well set a static address." ${r} ${c}
     # Nothing else to do since the variables are already set above
@@ -791,19 +821,19 @@ It is also possible to use a DHCP reservation, but if you are going to do that, 
     until [[ "${ipSettingsCorrect}" = True ]]; do
 
         # Ask for the IPv4 address
-        IPV4_ADDRESS=$(whiptail --backtitle "Calibrating network interface" --title "IPv4 address" --inputbox "Enter your desired IPv4 address" ${r} ${c} "${IPV4_ADDRESS}" 3>&1 1>&2 2>&3) || \
+        IPV4_ADDRESS=$(python -m whiptail --backtitle "Calibrating network interface" --title "IPv4 address" --inputbox "Enter your desired IPv4 address" ${r} ${c} "${IPV4_ADDRESS}" 3>&1 1>&2 2>&3) || \
         # Cancelling IPv4 settings window
         { ipSettingsCorrect=False; echo -e "  ${COL_LIGHT_RED}Cancel was selected, exiting installer${COL_NC}"; exit 1; }
         printf "  %b Your static IPv4 address: %s\\n" "${INFO}" "${IPV4_ADDRESS}"
 
         # Ask for the gateway
-        IPv4gw=$(whiptail --backtitle "Calibrating network interface" --title "IPv4 gateway (router)" --inputbox "Enter your desired IPv4 default gateway" ${r} ${c} "${IPv4gw}" 3>&1 1>&2 2>&3) || \
+        IPv4gw=$(python -m whiptail --backtitle "Calibrating network interface" --title "IPv4 gateway (router)" --inputbox "Enter your desired IPv4 default gateway" ${r} ${c} "${IPv4gw}" 3>&1 1>&2 2>&3) || \
         # Cancelling gateway settings window
         { ipSettingsCorrect=False; echo -e "  ${COL_LIGHT_RED}Cancel was selected, exiting installer${COL_NC}"; exit 1; }
         printf "  %b Your static IPv4 gateway: %s\\n" "${INFO}" "${IPv4gw}"
 
         # Give the user a chance to review their settings before moving on
-        if whiptail --backtitle "Calibrating network interface" --title "Static IP Address" --yesno "Are these settings correct?
+        if python -m whiptail --backtitle "Calibrating network interface" --title "Static IP Address" --yesno "Are these settings correct?
             IP address: ${IPV4_ADDRESS}
             Gateway:    ${IPv4gw}" ${r} ${c}; then
                 # After that's done, the loop ends and we move on
@@ -890,8 +920,26 @@ setStaticIPv4() {
             return 0
         fi
     fi
+
+    if [[ -f /etc/config/network ]]; then
+        # OpenWRT family
+        local ifname=$(uci show network | grep [.]ifname= | grep ${PIHOLE_INTERFACE} | cut -d '.' -f 2)
+        local proto=$(uci get network.${ifname}.proto)
+        local currip=$(uci get network.${ifname}.ipaddr)
+        if [ "$proto" == "static" ] && [ "$currip" == "$IPV4_ADDRESS" ]; then
+            echo "::: Static IP already configured"
+        else
+            uci set network.${ifname}.proto=static
+            uci set network.${ifname}.ipaddr=${IPV4_ADDRESS}
+            uci commit network
+            # given this is almost certainly going to be executed via ssh, dont apply change now
+            # because applying the change will kill the script
+            echo ":::"
+            echo "::: Setting IP to ${IPV4_ADDRESS}.  You may need to restart after the install is complete."
+            echo ":::"
+        fi
     # For the Debian family, if dhcpcd.conf exists,
-    if [[ -f "/etc/dhcpcd.conf" ]]; then
+    elif [[ -f "/etc/dhcpcd.conf" ]]; then
         # configure networking via dhcpcd
         setDHCPCD
         return 0
@@ -970,8 +1018,8 @@ setDNS() {
     DNSChooseOptions[DNSServerCount]=""
     # Restore the IFS to what it was
     IFS=${OIFS}
-    # In a whiptail dialog, show the options
-    DNSchoices=$(whiptail --separate-output --menu "Select Upstream DNS Provider. To use your own, select Custom." ${r} ${c} 7 \
+    # In a python -m whiptail dialog, show the options
+    DNSchoices=$(python -m whiptail --separate-output --menu "Select Upstream DNS Provider. To use your own, select Custom." ${r} ${c} 7 \
     "${DNSChooseOptions[@]}" 2>&1 >/dev/tty) || \
     # exit if Cancel is selected
     { printf "  %bCancel was selected, exiting installer%b\\n" "${COL_LIGHT_RED}" "${COL_NC}"; exit 1; }
@@ -1001,7 +1049,7 @@ setDNS() {
             fi
 
             # Dialog for the user to enter custom upstream servers
-            piholeDNS=$(whiptail --backtitle "Specify Upstream DNS Provider(s)"  --inputbox "Enter your desired upstream DNS provider(s), separated by a comma.\\n\\nFor example '8.8.8.8, 8.8.4.4'" ${r} ${c} "${prePopulate}" 3>&1 1>&2 2>&3) || \
+            piholeDNS=$(python -m whiptail --backtitle "Specify Upstream DNS Provider(s)"  --inputbox "Enter your desired upstream DNS provider(s), separated by a comma.\\n\\nFor example '8.8.8.8, 8.8.4.4'" ${r} ${c} "${prePopulate}" 3>&1 1>&2 2>&3) || \
             { printf "  %bCancel was selected, exiting installer%b\\n" "${COL_LIGHT_RED}" "${COL_NC}"; exit 1; }
             # Clean user input and replace whitespace with comma.
             piholeDNS=$(sed 's/[, \t]\+/,/g' <<< "${piholeDNS}")
@@ -1021,7 +1069,7 @@ setDNS() {
             # If either of the DNS servers are invalid,
             if [[ "${PIHOLE_DNS_1}" == "${strInvalid}" ]] || [[ "${PIHOLE_DNS_2}" == "${strInvalid}" ]]; then
                 # explain this to the user
-                whiptail --msgbox --backtitle "Invalid IP" --title "Invalid IP" "One or both entered IP addresses were invalid. Please try again.\\n\\n    DNS Server 1:   $PIHOLE_DNS_1\\n    DNS Server 2:   ${PIHOLE_DNS_2}" ${r} ${c}
+                python -m whiptail --msgbox --backtitle "Invalid IP" --title "Invalid IP" "One or both entered IP addresses were invalid. Please try again.\\n\\n    DNS Server 1:   $PIHOLE_DNS_1\\n    DNS Server 2:   ${PIHOLE_DNS_2}" ${r} ${c}
                 # and set the variables back to nothing
                 if [[ "${PIHOLE_DNS_1}" == "${strInvalid}" ]]; then
                     PIHOLE_DNS_1=""
@@ -1034,7 +1082,7 @@ setDNS() {
             # Otherwise,
             else
                 # Show the settings
-                if (whiptail --backtitle "Specify Upstream DNS Provider(s)" --title "Upstream DNS Provider(s)" --yesno "Are these settings correct?\\n    DNS Server 1:   $PIHOLE_DNS_1\\n    DNS Server 2:   ${PIHOLE_DNS_2}" ${r} ${c}); then
+                if (python -m whiptail --backtitle "Specify Upstream DNS Provider(s)" --title "Upstream DNS Provider(s)" --yesno "Are these settings correct?\\n    DNS Server 1:   $PIHOLE_DNS_1\\n    DNS Server 2:   ${PIHOLE_DNS_2}" ${r} ${c}); then
                 # and break from the loop since the servers are valid
                 DNSSettingsCorrect=True
                 # Otherwise,
@@ -1073,7 +1121,7 @@ setLogging() {
     local LogChoices
 
     # Ask if the user wants to log queries
-    LogToggleCommand=(whiptail --separate-output --radiolist "Do you want to log queries?" "${r}" "${c}" 6)
+    LogToggleCommand=(python -m whiptail --separate-output --radiolist "Do you want to log queries?" "${r}" "${c}" 6)
     # The default selection is on
     LogChooseOptions=("On (Recommended)" "" on
         Off "" off)
@@ -1100,7 +1148,7 @@ setPrivacyLevel() {
     local LevelCommand
     local LevelOptions
 
-    LevelCommand=(whiptail --separate-output --radiolist "Select a privacy mode for FTL. https://docs.pi-hole.net/ftldns/privacylevels/" "${r}" "${c}" 6)
+    LevelCommand=(python -m whiptail --separate-output --radiolist "Select a privacy mode for FTL. https://docs.pi-hole.net/ftldns/privacylevels/" "${r}" "${c}" 6)
 
     # The default selection is level 0
     LevelOptions=(
@@ -1125,7 +1173,7 @@ setAdminFlag() {
     local WebChoices
 
     # Similar to the logging function, ask what the user wants
-    WebToggleCommand=(whiptail --separate-output --radiolist "Do you wish to install the web admin interface?" ${r} ${c} 6)
+    WebToggleCommand=(python -m whiptail --separate-output --radiolist "Do you wish to install the web admin interface?" ${r} ${c} 6)
     # with the default being enabled
     WebChooseOptions=("On (Recommended)" "" on
         Off "" off)
@@ -1146,7 +1194,7 @@ setAdminFlag() {
 
     # Request user to install web server, if --disable-install-webserver has not been used (INSTALL_WEB_SERVER=true is default).
     if [[ "${INSTALL_WEB_SERVER}" == true ]]; then
-        WebToggleCommand=(whiptail --separate-output --radiolist "Do you wish to install the web server (lighttpd)?\\n\\nNB: If you disable this, and, do not have an existing webserver installed, the web interface will not function." "${r}" "${c}" 6)
+        WebToggleCommand=(python -m whiptail --separate-output --radiolist "Do you wish to install the web server (lighttpd)?\\n\\nNB: If you disable this, and, do not have an existing webserver installed, the web interface will not function." "${r}" "${c}" 6)
         # with the default being enabled
         WebChooseOptions=("On (Recommended)" "" on
             Off "" off)
@@ -1174,7 +1222,7 @@ chooseBlocklists() {
         mv "${adlistFile}" "${adlistFile}.old"
     fi
     # Let user select (or not) blocklists via a checklist
-    cmd=(whiptail --separate-output --checklist "Pi-hole relies on third party lists in order to block ads.\\n\\nYou can use the suggestions below, and/or add your own after installation\\n\\nTo deselect any list, use the arrow keys and spacebar" "${r}" "${c}" 6)
+    cmd=(python -m whiptail --separate-output --checklist "Pi-hole relies on third party lists in order to block ads.\\n\\nYou can use the suggestions below, and/or add your own after installation\\n\\nTo deselect any list, use the arrow keys and spacebar" "${r}" "${c}" 6)
     # In an array, show the options available (all off by default):
     options=(StevenBlack "StevenBlack's Unified Hosts List" on
         MalwareDom "MalwareDomains" on
@@ -1453,8 +1501,10 @@ stop_service() {
     printf "  %b %s..." "${INFO}" "${str}"
     if is_command systemctl ; then
         systemctl stop "${1}" &> /dev/null || true
-    else
+    elif command -v service &> /dev/null; then
         service "${1}" stop &> /dev/null || true
+    else
+        /etc/init.d "${1}" stop &> /dev/null || true
     fi
     printf "%b  %b %s...\\n" "${OVER}" "${TICK}" "${str}"
 }
@@ -1469,9 +1519,11 @@ restart_service() {
         # use that to restart the service
         systemctl restart "${1}" &> /dev/null
     # Otherwise,
-    else
+    elif command -v service &> /dev/null; then
         # fall back to the service command
         service "${1}" restart &> /dev/null
+    else
+        /etc/init.d "${1}" restart
     fi
     printf "%b  %b %s...\\n" "${OVER}" "${TICK}" "${str}"
 }
@@ -1486,9 +1538,11 @@ enable_service() {
         # use that to enable the service
         systemctl enable "${1}" &> /dev/null
     # Otherwise,
-    else
+    elif command -v update-rc.d &> /dev/null; then
         # use update-rc.d to accomplish this
         update-rc.d "${1}" defaults &> /dev/null
+    else
+        /etc/init.d "${1}" enable
     fi
     printf "%b  %b %s...\\n" "${OVER}" "${TICK}" "${str}"
 }
@@ -1631,23 +1685,39 @@ install_dependent_packages() {
             debconf-apt-progress -- "${PKG_INSTALL[@]}" "${installArray[@]}"
             return
         fi
-        printf "\\n"
-        return 0
-    fi
-
-    # Install Fedora/CentOS packages
-    for i in "$@"; do
-        printf "  %b Checking for %s..." "${INFO}" "${i}"
-        if ${PKG_MANAGER} -q list installed "${i}" &> /dev/null; then
-            printf "%b  %b Checking for %s" "${OVER}" "${TICK}" "${i}"
+    elif [[ -f /etc/opkg.conf ]]; then
+        # OpenWRT
+        for i in "${argArray1[@]}"; do
+        echo -n ":::    Checking for $i..."
+        if ${PKG_MANAGER} list-installed | cut -d ' ' -f 1 | grep "\b${i}\b" &> /dev/null; then
+            echo " installed!"
         else
-            printf "%b  %b Checking for %s (will be installed)" "${OVER}" "${INFO}" "${i}"
+            echo " added to install list!"
             installArray+=("${i}")
         fi
-    done
-    if [[ "${#installArray[@]}" -gt 0 ]]; then
+        done
+        if [[ ${#installArray[@]} -gt 0 ]]; then
         "${PKG_INSTALL[@]}" "${installArray[@]}" &> /dev/null
         return
+    fi
+
+    else
+        # Install Fedora/CentOS packages
+        for i in "$@"; do
+            printf "  %b Checking for %s..." "${INFO}" "${i}"
+            if ${PKG_MANAGER} -q list installed "${i}" &> /dev/null; then
+                printf "%b  %b Checking for %s" "${OVER}" "${TICK}" "${i}"
+            else
+                printf "%b  %b Checking for %s (will be installed)" "${OVER}" "${INFO}" "${i}"
+                installArray+=("${i}")
+            fi
+        done
+        if [[ "${#installArray[@]}" -gt 0 ]]; then
+            "${PKG_INSTALL[@]}" "${installArray[@]}" &> /dev/null
+            return
+        fi
+        printf "\\n"
+        return 0
     fi
     printf "\\n"
     return 0
@@ -1755,7 +1825,7 @@ configureFirewall() {
     # If a firewall is running,
     if firewall-cmd --state &> /dev/null; then
         # ask if the user wants to install Pi-hole's default firewall rules
-        whiptail --title "Firewall in use" --yesno "We have detected a running firewall\\n\\nPi-hole currently requires HTTP and DNS port access.\\n\\n\\n\\nInstall Pi-hole default firewall rules?" ${r} ${c} || \
+        python -m whiptail --title "Firewall in use" --yesno "We have detected a running firewall\\n\\nPi-hole currently requires HTTP and DNS port access.\\n\\n\\n\\nInstall Pi-hole default firewall rules?" ${r} ${c} || \
         { printf "  %b Not installing firewall rulesets.\\n" "${INFO}"; return 0; }
         printf "  %b Configuring FirewallD for httpd and pihole-FTL\\n" "${TICK}"
         # Allow HTTP and DNS traffic
@@ -1768,7 +1838,7 @@ configureFirewall() {
     # If chain Policy is not ACCEPT or last Rule is not ACCEPT
     # then check and insert our Rules above the DROP/REJECT Rule.
         if iptables -S INPUT | head -n1 | grep -qv '^-P.*ACCEPT$' || iptables -S INPUT | tail -n1 | grep -qv '^-\(A\|P\).*ACCEPT$'; then
-            whiptail --title "Firewall in use" --yesno "We have detected a running firewall\\n\\nPi-hole currently requires HTTP and DNS port access.\\n\\n\\n\\nInstall Pi-hole default firewall rules?" ${r} ${c} || \
+            python -m whiptail --title "Firewall in use" --yesno "We have detected a running firewall\\n\\nPi-hole currently requires HTTP and DNS port access.\\n\\n\\n\\nInstall Pi-hole default firewall rules?" ${r} ${c} || \
             { printf "  %b Not installing firewall rulesets.\\n" "${INFO}"; return 0; }
             printf "  %b Installing new IPTables firewall rulesets\\n" "${TICK}"
             # Check chain first, otherwise a new rule will duplicate old ones
@@ -1957,7 +2027,7 @@ checkSelinux() {
         # If it's enforcing,
         if [[ "${enforceMode}" == "Enforcing" ]]; then
             # Explain Pi-hole does not support it yet
-            whiptail --defaultno --title "SELinux Enforcing Detected" --yesno "SELinux is being ENFORCED on your system! \\n\\nPi-hole currently does not support SELinux, but you may still continue with the installation.\\n\\nNote: Web Admin will not be fully functional unless you set your policies correctly\\n\\nContinue installing Pi-hole?" ${r} ${c} || \
+            python -m whiptail --defaultno --title "SELinux Enforcing Detected" --yesno "SELinux is being ENFORCED on your system! \\n\\nPi-hole currently does not support SELinux, but you may still continue with the installation.\\n\\nNote: Web Admin will not be fully functional unless you set your policies correctly\\n\\nContinue installing Pi-hole?" ${r} ${c} || \
             { printf "\\n  %bSELinux Enforcing detected, exiting installer%b\\n" "${COL_LIGHT_RED}" "${COL_NC}"; exit 1; }
             printf "  %b Continuing installation with SELinux Enforcing\\n" "${INFO}"
             printf "      %b Please refer to official SELinux documentation to create a custom policy\\n" "${INFO}"
@@ -1987,7 +2057,7 @@ Your Admin Webpage login password is ${pwstring}"
    fi
 
     # Final completion message to user
-    whiptail --msgbox --backtitle "Make it so." --title "Installation Complete!" "Configure your devices to use the Pi-hole as their DNS server using:
+    python -m whiptail --msgbox --backtitle "Make it so." --title "Installation Complete!" "Configure your devices to use the Pi-hole as their DNS server using:
 
 IPv4:	${IPV4_ADDRESS%/*}
 IPv6:	${IPV6_ADDRESS:-"Not Configured"}
@@ -2017,7 +2087,7 @@ update_dialogs() {
     opt2b="This will reset your Pi-hole and allow you to enter new settings."
 
     # Display the information to the user
-    UpdateCmd=$(whiptail --title "Existing Install Detected!" --menu "\\n\\nWe have detected an existing install.\\n\\nPlease choose from the following options: \\n($strAdd)" ${r} ${c} 2 \
+    UpdateCmd=$(python -m whiptail --title "Existing Install Detected!" --menu "\\n\\nWe have detected an existing install.\\n\\nPlease choose from the following options: \\n($strAdd)" ${r} ${c} 2 \
     "${opt1a}"  "${opt1b}" \
     "${opt2a}"  "${opt2b}" 3>&2 2>&1 1>&3) || \
     { printf "  %bCancel was selected, exiting installer%b\\n" "${COL_LIGHT_RED}" "${COL_NC}"; exit 1; }
@@ -2261,8 +2331,13 @@ get_binary_name() {
 
     local str="Detecting architecture"
     printf "  %b %s..." "${INFO}" "${str}"
+    if [[ $machine == mips ]]; then
+        # MIPS (probably OpenWRT)
+        echo ":::  Detected MIPS architecture"
+        echo ":::  No working FTL binary exists for this architecture. Skipping..."
+        return 1 # no binary available
     # If the machine is arm or aarch
-    if [[ "${machine}" == "arm"* || "${machine}" == *"aarch"* ]]; then
+    elif [[ "${machine}" == "arm"* || "${machine}" == *"aarch"* ]]; then
         # ARM
         #
         local rev
@@ -2489,7 +2564,7 @@ main() {
     if [[ -f "${setupVars}" ]]; then
         # if it's running unattended,
         if [[ "${runUnattended}" == true ]]; then
-            printf "  %b Performing unattended setup, no whiptail dialogs will be displayed\\n" "${INFO}"
+            printf "  %b Performing unattended setup, no python -m whiptail dialogs will be displayed\\n" "${INFO}"
             # Use the setup variables
             useUpdateVars=true
             # also disable debconf-apt-progress dialogs
